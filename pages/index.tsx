@@ -1,15 +1,12 @@
-import type { NextPage } from "next";
-import Head from "next/head";
-import Image from "next/image";
-import { useRouter } from "next/router";
-import { useEffect, useRef, useState } from "react";
-import { useMoralis, useWeb3Transfer } from "react-moralis";
-import style from "./home.module.css";
-import { contractAddress, usdcAbi } from "./constants/const";
 import { ethers } from "ethers";
-import { ToastContainer, toast } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
+import type { NextPage } from "next";
+import { useEffect, useRef, useState } from "react";
+import { useMoralis } from "react-moralis";
 import QRCode from "react-qr-code";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+import { contractAddress, usdcAbi } from "../constants/const";
+import style from "./home.module.css";
 
 const convertVNDToUSDC = (vnd: number) => {
   return vnd / 200000;
