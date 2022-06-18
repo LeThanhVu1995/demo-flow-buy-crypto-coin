@@ -21,6 +21,14 @@ import axios from "axios";
 import moment from "moment";
 import style from "./home.module.css";
 
+function numberWithCommas(x: any) {
+  return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+function removeNumberWithCommas(x: any) {
+  return x.replaceAll(".", "");
+}
+
 const createVoucherAPI = async (params = {}) => {
   params = {
     ...params,
@@ -65,26 +73,32 @@ const vouchersData = [
   {
     id: "ABCDEF",
     price: 1000000,
+    displayPrice: numberWithCommas(1000000),
   },
   {
     id: "FBCDEF",
     price: 3000000,
+    displayPrice: numberWithCommas(3000000),
   },
   {
     id: "YYCDEF",
     price: 5000000,
+    displayPrice: numberWithCommas(5000000),
   },
   {
     id: "AFADEF",
     price: 15000000,
+    displayPrice: numberWithCommas(15000000),
   },
   {
     id: "ABLKEF",
     price: 20000000,
+    displayPrice: numberWithCommas(20000000),
   },
   {
     id: "ABCEEEF",
     price: 25000000,
+    displayPrice: numberWithCommas(25000000),
   },
 ];
 
@@ -107,6 +121,21 @@ const Home: NextPage = () => {
   const [walletSelect, setWalletSelect] = useState({});
   const [rateVnd, setRateVnd] = useState(0);
   const [dataQRCode, setDataQRCode] = useState("");
+  const [displayInput, setDisplayInput] = useState("0");
+
+  const reset = () => {
+    setSelectVoucher("");
+    setValueVoucher(0);
+    setUsdc(0);
+    setEmail("");
+    setOpened(false);
+    setOpenedPayingPopup(false);
+    setPaying(false);
+    setIsPaid(false);
+    setEtherscanLink("");
+    setDataQRCode("");
+    setDisplayInput("0");
+  };
 
   const convertVNDToUSDC = (vnd: number) => {
     return Number((vnd / rateVnd).toFixed(3));
@@ -138,6 +167,7 @@ const Home: NextPage = () => {
   const onClickVoucher = (voucher: any) => {
     setSelectVoucher(voucher.id);
     setValueVoucher(voucher.price);
+    setDisplayInput(voucher.displayPrice);
     setUsdc(convertVNDToUSDC(voucher.price));
   };
 
@@ -595,7 +625,13 @@ const Home: NextPage = () => {
           </h3>
         </div>
 
-        <img src="/logo.png" />
+        <img
+          src="/logo.png"
+          onClick={() => {
+            console.log("click-logo");
+            reset();
+          }}
+        />
         <img onClick={() => onHandleLogout()} src="/menu.png" />
       </header>
       <main className="p-[16px]">
@@ -648,7 +684,7 @@ const Home: NextPage = () => {
             </span>
             <input
               pattern="[0-9]*"
-              className={style["buyer-input"]}
+              className={`hidden`}
               type="text"
               onChange={(e) => {
                 const number = Number(e.target.value || 0);
@@ -668,6 +704,33 @@ const Home: NextPage = () => {
               }}
               value={valueVoucher}
             ></input>
+            <input
+              pattern="[0-9]*"
+              className={style["buyer-input"]}
+              type="text"
+              onChange={(e) => {
+                let number = removeNumberWithCommas(e.target.value || "0");
+                console.log(number);
+                number = Number(number || 0);
+                if (isNaN(number)) return;
+
+                setValueVoucher(number);
+                setDisplayInput(numberWithCommas(number));
+                setUsdc(convertVNDToUSDC(number));
+
+                const voucher = vouchers.find(
+                  (voucher) => voucher.price === number
+                );
+
+                if (voucher) {
+                  setSelectVoucher(voucher.id);
+                } else {
+                  setSelectVoucher("");
+                }
+              }}
+              value={displayInput}
+            ></input>
+
             <div className={style["list-voucher"]}>
               {vouchers.map((voucher: any) => (
                 <div
@@ -681,7 +744,7 @@ const Home: NextPage = () => {
                     ]
                   }
                 >
-                  {`${voucher.price} VND`}
+                  {`${voucher.displayPrice} VND`}
                 </div>
               ))}
             </div>
