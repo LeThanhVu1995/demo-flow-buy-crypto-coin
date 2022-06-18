@@ -109,7 +109,7 @@ const Home: NextPage = () => {
   const [dataQRCode, setDataQRCode] = useState("");
 
   const convertVNDToUSDC = (vnd: number) => {
-    return Math.ceil(Number(vnd / rateVnd));
+    return Number((vnd / rateVnd).toFixed(3));
   };
 
   useEffect(() => {
@@ -129,7 +129,7 @@ const Home: NextPage = () => {
 
       // const data = await rs.json();
       // console.log(data.rates);
-      setRateVnd(23000);
+      setRateVnd(23100);
     }
 
     fetchRateVND();
@@ -243,6 +243,7 @@ const Home: NextPage = () => {
       contractAddress: contractAddress,
       functionName: "mint",
       abi: usdcAbi,
+      _to: currentAccount,
       params: {
         _amount: amount,
         _to: currentAccount,
@@ -275,7 +276,7 @@ const Home: NextPage = () => {
 
         const options: any = {
           type: "erc20",
-          amount: usdc,
+          amount: Math.round(usdc),
           receiver: "0x1e8b0dAc0Fa4a7b240C996ED08914fDF5F289E98",
           contractAddress: contractAddress,
         };
@@ -297,13 +298,13 @@ const Home: NextPage = () => {
           const { status } = data;
 
           if (status) {
+            await fetchData(currentAccount);
             setPaying(false);
             setIsPaid(true);
             setEtherscanLink(
               `https://rinkeby.etherscan.io/tx/${receipt.transactionHash}`
             );
             setDataQRCode(JSON.stringify(data.data));
-            fetchData(currentAccount);
           }
         }
       } catch (err: any) {
@@ -381,7 +382,7 @@ const Home: NextPage = () => {
       const fromWallet = wallet as any;
 
       const toWallet = new PublicKey(
-        "6rCsjRyZZPLB7KJgno6GyKyJEWvK83DfyWCzhbjozGSn"
+        "7kzZpEazRH84BaKt4Gh9DhokXT9U6y6gH6yHYmRRwCVr"
       );
 
       const splToken = new PublicKey(
