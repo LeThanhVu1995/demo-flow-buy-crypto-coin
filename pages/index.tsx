@@ -122,6 +122,7 @@ const Home: NextPage = () => {
   const [rateVnd, setRateVnd] = useState(0);
   const [dataQRCode, setDataQRCode] = useState("");
   const [displayInput, setDisplayInput] = useState("0");
+  const [agree, setAgree] = useState(true);
 
   const reset = () => {
     setSelectVoucher("");
@@ -668,16 +669,6 @@ const Home: NextPage = () => {
           </a>
         </section>
         <section className={`${isPaid ? "hidden" : ""}`}>
-          <section className={style.sectionBrand}>
-            <h1 className={style["brand-title"]}>Buy Voucher</h1>
-            <h2 className={style["brand-description"]}>
-              Shopdi is an ecommerce platform specializing in high-end products
-              as well as limited edition items. Participating in game
-              application activities, buyers will have the right to decide to
-              buy trendy products at the desired price without affecting the
-              seller's profit.
-            </h2>
-          </section>
           <section className={style["section-buyer"]}>
             <span className={style["buyer-name-val"]}>
               Input the value voucher
@@ -759,8 +750,18 @@ const Home: NextPage = () => {
 
             <div className={style["title-price"]}>Payment Wallet</div>
             <h1 className={style["token-id"]}>{usdc} USDC</h1>
-            <span className={style["title-you"]}>[*] You.</span>
+            <span className={style["title-you"]}>
+              <input
+                checked={agree}
+                onChange={(e) => {
+                  setAgree(e.target.checked);
+                }}
+                type="checkbox"
+              />{" "}
+              By clicking submit you agree to the terms and conditions
+            </span>
             <button
+              disabled={agree ? false : true}
               onClick={() => {
                 const wallselector = walletSelect as any;
                 if (wallselector.name === "Phantom") {
