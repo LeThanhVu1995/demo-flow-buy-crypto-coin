@@ -246,7 +246,12 @@ const Home: NextPage = () => {
       if (walletSelector.name === "Phantom") {
         await wallet.connect();
       } else {
-        await authenticate();
+        const { ethereum } = window as any;
+        if (ethereum) {
+          await authenticate();
+        } else {
+          notify("You are not install metamask wallet");
+        }
       }
     } catch (error) {
       console.error(error);
