@@ -65,8 +65,8 @@ const vouchersData = [
   },
 ];
 
-const serverURL: any = process.env.NEXT_URL_SERVER || "https://nodejs-voucher.herokuapp.com/";
-const socketURL: any = process.env.NEXT_URL_SOCKET || "https://nodejs-voucher.herokuapp.com/";
+const serverURL: any = process.env.NEXT_URL_SERVER || "https://nodejs-voucher.herokuapp.com";
+const socketURL: any = process.env.NEXT_URL_SOCKET || "https://nodejs-voucher.herokuapp.com";
 
 const Home: NextPage = () => {
   const [vouchers, setVouchers] = useState(vouchersData);
