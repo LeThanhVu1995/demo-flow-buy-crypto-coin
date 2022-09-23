@@ -1,25 +1,19 @@
-import {
-  createTransferCheckedInstruction,
-  getAccount,
-  getAssociatedTokenAddress,
-  getMint,
-} from "@solana/spl-token";
-
-import { PublicKey, Transaction } from "@solana/web3.js";
-import { ethers } from "ethers";
 import type { NextPage } from "next";
 import { useEffect, useRef, useState } from "react";
-import { useMoralis } from "react-moralis";
 import QRCode from "react-qr-code";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import { contractAddress, usdcAbi } from "../constants/const";
-// import { getOrCreateAssociatedTokenAccount } from "../constants/getOrCreateAssociatedTokenAccount";
-import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import axios from "axios";
 import moment from "moment";
 import style from "./home.module.css";
+import Web3 from "web3";
+import {
+  shopdiAbi,
+  contractAddress,
+  contractAbiToken,
+  contractAddressToken,
+} from "../constants/const";
+import socketIOClient from "socket.io-client";
 
 function numberWithCommas(x: any) {
   return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
@@ -29,43 +23,12 @@ function removeNumberWithCommas(x: any) {
   return x.replaceAll(".", "");
 }
 
-const createVoucherAPI = async (params = {}) => {
-  params = {
-    ...params,
-    expiredDate: moment().add(30, "days").format("DD/MM/YYYY"),
-  };
-  const result = await axios.post(
-    "https://backend-stag.shopdi.io/api/v2/bcvouchers",
-    params
-  );
-
-  return result.data;
-};
-
 const connectionWallet = [
   {
     name: "Metamask",
     src: "/metamask.png",
     options: {},
     popular: true,
-  },
-  // {
-  //   name: "Coinbase",
-  //   src: "/coinbase.png",
-  //   options: {},
-  //   popular: false,
-  // },
-  // {
-  //   name: "WallConnect",
-  //   src: "/wallconnect.png",
-  //   options: { provider: "walletconnect" },
-  //   popular: false,
-  // },
-  {
-    name: "Phantom",
-    src: "/phantom.png",
-    options: { type: "sol" },
-    popular: false,
   },
 ];
 
@@ -102,6 +65,9 @@ const vouchersData = [
   },
 ];
 
+const serverURL: any = process.env.NEXT_URL_SERVER || "http://localhost:8000";
+const socketURL: any = process.env.NEXT_URL_SOCKET || "localhost:8000";
+
 const Home: NextPage = () => {
   const [vouchers, setVouchers] = useState(vouchersData);
   const [selectVoucher, setSelectVoucher] = useState("");
@@ -116,13 +82,17 @@ const Home: NextPage = () => {
   const [isPaying, setPaying] = useState(false);
   const [isPaid, setIsPaid] = useState(false);
   const [balance, setBalance] = useState("");
-  const [mintValue, setMintValue] = useState("");
   const [ethercanLink, setEtherscanLink] = useState("");
   const [walletSelect, setWalletSelect] = useState({});
   const [rateVnd, setRateVnd] = useState(0);
   const [dataQRCode, setDataQRCode] = useState("");
   const [displayInput, setDisplayInput] = useState("0");
   const [agree, setAgree] = useState(true);
+
+  const [web3, setWeb3] = useState(null);
+  const [contract, setContract] = useState(null);
+
+  const [contractToken, setContractToken] = useState(null);
 
   const reset = () => {
     setSelectVoucher("");
@@ -138,28 +108,116 @@ const Home: NextPage = () => {
     setDisplayInput("0");
   };
 
-  const convertVNDToUSDC = (vnd: number) => {
+  const convertVNDToSHOD = (vnd: number) => {
     return Number((vnd / rateVnd).toFixed(3));
   };
 
+  const connectMetamask = async () => {
+    const { ethereum: provider } = window as any;
+
+    if (typeof provider !== "undefined") {
+      provider
+        .request({ method: "eth_requestAccounts" })
+        .then((accounts: any) => {
+          const [account] = accounts;
+          setCurrentAccount(account);
+        })
+        .catch((err: any) => console.error(err));
+    }
+  };
+
+  useEffect(() => {
+    const socket = socketIOClient(socketURL);
+
+    socket.on("payment-success", (data) => {
+      console.log("client running socket", data);
+      const { user } = data;
+      console.log(user, currentAccount, user === currentAccount);
+      if (user === currentAccount) {
+        console.log("already paid");
+        setPaying(false);
+        setIsPaid(true);
+        setDataQRCode(JSON.stringify(data.data));
+      }
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [currentAccount]);
+
+  useEffect(() => {
+    (async () => {
+      const { ethereum } = window as any;
+
+      const web3: any = new Web3(ethereum);
+      const contract: any = new web3.eth.Contract(shopdiAbi, contractAddress);
+      const contractToken: any = new web3.eth.Contract(
+        contractAbiToken,
+        contractAddressToken
+      );
+      setWeb3(web3);
+      setContract(contract);
+      setContractToken(contractToken);
+
+      const accounts = await ethereum.request({ method: "eth_accounts" });
+      if (accounts && accounts.length) {
+        setCurrentAccount(accounts[0]);
+      }
+    })();
+  }, []);
+
+  const signatureContract = async (params: any) => {
+    const { data } = await axios.post(`${serverURL}/order`, params);
+    return data;
+  };
+
+  const buyToken = async () => {
+    setOpenedPayingPopup(true);
+    setPaying(true);
+
+    const ct = contract as any;
+    const ctToken = contractToken as any;
+    const coin = Number(usdc) * 1000000000000000000;
+
+    const { signature, data }: any = await signatureContract({
+      user: currentAccount,
+      amount: coin,
+      value: valueVoucher,
+      emailorphone: email,
+    });
+
+    const { v, r, s }: any = signature;
+    const { id, amount } = data;
+
+    const success = await ct.methods
+      .permit(currentAccount, id, amount, v, r, s)
+      .call();
+    if (success) {
+      await ctToken.methods
+        .approve(contractAddress, amount.toString())
+        .send({ from: currentAccount });
+
+      await ct.methods
+        .buy(id, amount.toString(), v, r, s)
+        .send({ from: currentAccount });
+      console.log("scu");
+    } else {
+      console.log("fail");
+    }
+  };
+
+  useEffect(() => {
+    const { ethereum } = window as any;
+    ethereum.on("accountsChanged", function (accounts: any) {
+      const [account] = accounts;
+      setCurrentAccount(account);
+    });
+  }, []);
+
   useEffect(() => {
     async function fetchRateVND() {
-      // var myHeaders = new Headers();
-      // myHeaders.append("apikey", "CB35iBvtrhd0Q3PSdDUKLqVpG9AKDvAP");
-
-      // var requestOptions: any = {
-      //   method: "GET",
-      //   headers: myHeaders,
-      // };
-
-      // const rs = await fetch(
-      //   "https://api.apilayer.com/exchangerates_data/latest?symbols=VND&base=USD",
-      //   requestOptions
-      // );
-
-      // const data = await rs.json();
-      // console.log(data.rates);
-      setRateVnd(23100);
+      setRateVnd(10000);
     }
 
     fetchRateVND();
@@ -169,51 +227,8 @@ const Home: NextPage = () => {
     setSelectVoucher(voucher.id);
     setValueVoucher(voucher.price);
     setDisplayInput(voucher.displayPrice);
-    setUsdc(convertVNDToUSDC(voucher.price));
+    setUsdc(convertVNDToSHOD(voucher.price));
   };
-
-  const {
-    authenticate,
-    Moralis,
-    isWeb3Enabled,
-    isAuthenticated,
-    logout,
-    user,
-  } = useMoralis();
-
-  const wallet = useWallet();
-  const { connection } = useConnection();
-
-  async function fetchData(account: any) {
-    if ((walletSelect as any).name === "Metamask") {
-      const options = {
-        contractAddress: contractAddress,
-        functionName: "balanceOf",
-        abi: usdcAbi,
-        params: {
-          account: account,
-        },
-      };
-
-      if (isWeb3Enabled) {
-        const response = await Moralis.executeFunction(options);
-        console.log(response.toString());
-        setBalance(response.toString());
-      }
-    }
-  }
-  useEffect(() => {
-    return () => {
-      window.addEventListener("beforeunload", async (ev) => {
-        ev.preventDefault();
-        await onHandleLogout();
-      });
-    };
-  }, []);
-
-  useEffect(() => {
-    fetchData(currentAccount);
-  }, []);
 
   const showHideConnectionPopup = (ref: any, opened = false) => {
     const node = ref.current;
@@ -228,272 +243,25 @@ const Home: NextPage = () => {
     }
   };
 
-  const onHandleLogout = async () => {
-    const walletSelector = walletSelect as any;
-    if (walletSelector.name === "Phantom") {
-      await wallet.disconnect();
-    } else {
-      await logout();
-    }
-
-    setBalance("");
-  };
-
-  const onHandleConnectWallet = async (options: any) => {
+  const onHandleConnectWallet = async () => {
     try {
-      const walletSelector = walletSelect as any;
-
-      if (walletSelector.name === "Phantom") {
-        await wallet.connect();
-      } else {
-        const { ethereum } = window as any;
-        if (ethereum) {
-          await authenticate();
-        } else {
-          notify("You are not install metamask wallet");
-        }
-      }
+      connectMetamask();
     } catch (error) {
       console.error(error);
     }
   };
 
-  const onHandleMintValue = async () => {
-    if (!isAuthenticated) {
+  const onHandleBuying = async () => {
+    if (!currentAccount) {
       setOpened(true);
       return;
     }
 
-    if (Number(mintValue) <= 0) {
-      notify("Enter your USDC to exchange");
-      return;
-    }
-
-    const amount = ethers.BigNumber.from(mintValue);
-    const price = ethers.BigNumber.from("100000");
-    const calcPrice = amount.mul(price);
-
-    console.log(contractAddress, amount, price, calcPrice);
-
-    let options: any = {
-      contractAddress: contractAddress,
-      functionName: "mint",
-      abi: usdcAbi,
-      _to: currentAccount,
-      params: {
-        _amount: amount,
-        _to: currentAccount,
-      },
-    };
-    const transaction: any = await Moralis.executeFunction(options);
-    const receipt = await transaction.wait();
-
-    if (receipt) {
-      setMintValue("0");
-      fetchData(currentAccount);
-      notify("Exchange token success.");
-    }
-  };
-
-  const onHandleBuying = async () => {
-    if (!isAuthenticated) setOpened(true);
-
-    if (isAuthenticated) {
-      try {
-        if (Number(usdc) < 1) {
-          notify("Minimum price voucher is 1 USDC");
-          return;
-        }
-
-        if (Number(usdc) > Number(balance)) {
-          notify("You are not enough USDC to buy voucher");
-          return;
-        }
-
-        const options: any = {
-          type: "erc20",
-          amount: Math.round(usdc),
-          receiver: "0x1e8b0dAc0Fa4a7b240C996ED08914fDF5F289E98",
-          contractAddress: contractAddress,
-        };
-
-        const transaction: any = await Moralis.transfer(options);
-        setPaying(true);
-        setOpenedPayingPopup(true);
-        const receipt = await transaction.wait();
-
-        if (receipt) {
-          const data = await createVoucherAPI({
-            amount: 100,
-            value: valueVoucher,
-            email: email,
-          });
-
-          console.log(data.data);
-
-          const { status } = data;
-
-          if (status) {
-            await fetchData(currentAccount);
-            setPaying(false);
-            setIsPaid(true);
-            setEtherscanLink(
-              `https://rinkeby.etherscan.io/tx/${receipt.transactionHash}`
-            );
-            setDataQRCode(JSON.stringify(data.data));
-          }
-        }
-      } catch (err: any) {
-        console.error(err);
-        setOpenedPayingPopup(false);
-        setPaying(false);
-        setIsPaid(false);
-        notify(err.message);
-      }
-    }
+    await buyToken();
+    console.log("Buyingggg voucher");
   };
 
   const notify = (message: any) => toast(message);
-
-  // const isAuthenticatedWallet = () => {
-  //   if((walletSelect as any).name === "Phantom") {
-  //     return walletSolana.connected;
-  //   }
-
-  //   return isAuthenticated;
-  // }
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      if (Moralis.User.current()) {
-        setCurrentAccount(user?.get("ethAddress") || user?.get("solAddress"));
-        fetchData(user?.get("ethAddress") || user?.get("solAddress"));
-      }
-      setOpened(false);
-    } else {
-      setCurrentAccount("");
-    }
-  }, [isAuthenticated]);
-
-  const fetchDataSolana = async () => {
-    console.log("Connect solana");
-
-    const splToken = new PublicKey(
-      "Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr"
-    );
-
-    const fromWallet = wallet as any;
-    const getMintToken = await getMint(connection, splToken);
-    const mint = getMintToken.address;
-
-    const fromTokenAccount = await getAssociatedTokenAddress(
-      mint,
-      fromWallet.publicKey
-    );
-
-    const senderAccount: any = await getAccount(connection, fromTokenAccount);
-    console.log(senderAccount.amount);
-    setBalance(
-      Math.floor(Number(senderAccount.amount.toString()) / 1000000) + ""
-    );
-  };
-
-  const onHandleBuyingSolana = async () => {
-    try {
-      if (!wallet.connected) {
-        setOpened(true);
-        return;
-      }
-
-      if (Number(usdc) < 1) {
-        notify("Minimum price voucher is 1 USDC");
-        return;
-      }
-
-      if (Number(usdc) > Number(balance)) {
-        notify("You are not enough USDC to buy voucher");
-        return;
-      }
-
-      const fromWallet = wallet as any;
-
-      const toWallet = new PublicKey(
-        "7kzZpEazRH84BaKt4Gh9DhokXT9U6y6gH6yHYmRRwCVr"
-      );
-
-      const splToken = new PublicKey(
-        "Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr"
-      );
-
-      const getMintToken = await getMint(connection, splToken);
-      const mint = getMintToken.address;
-
-      const fromTokenAccount = await getAssociatedTokenAddress(
-        mint,
-        fromWallet.publicKey
-      );
-      const toTokenAccount = await getAssociatedTokenAddress(mint, toWallet);
-
-      let tx = new Transaction().add(
-        createTransferCheckedInstruction(
-          fromTokenAccount, // from (should be a token account)
-          mint, // mint
-          toTokenAccount, // to (should be a token account)
-          fromWallet.publicKey, // from's owner
-          usdc * 1000000, // amount, if your deciamls is 8, send 10^8 for 1 token
-          6 // decimals
-        )
-      );
-
-      const blockHash = await connection.getRecentBlockhash();
-      tx.feePayer = fromWallet.publicKey;
-      tx.recentBlockhash = blockHash.blockhash;
-
-      const signed = await fromWallet.signTransaction(tx);
-
-      setPaying(true);
-      setOpenedPayingPopup(true);
-      const result = await connection.sendRawTransaction(signed.serialize());
-
-      await connection.confirmTransaction(result);
-      if (result) {
-        console.log(result);
-
-        const data = await createVoucherAPI({
-          amount: 100,
-          value: valueVoucher,
-          email: email,
-        });
-
-        console.log(data.data);
-
-        const { status } = data;
-
-        if (status) {
-          console.log(data);
-          setPaying(false);
-          setIsPaid(true);
-          setEtherscanLink(`https://solscan.io/tx/${result}?cluster=devnet`);
-          setDataQRCode(JSON.stringify(data.data));
-          await fetchDataSolana();
-        }
-      }
-    } catch (error) {
-      console.log(error);
-      notify(error);
-    }
-  };
-
-  useEffect(() => {
-    if (wallet.connected) {
-      const publicKey = wallet.publicKey?.toBase58() as any;
-      setCurrentAccount(publicKey);
-      fetchDataSolana();
-      setOpened(false);
-    } else {
-      setCurrentAccount("");
-    }
-  }, [wallet.connected]);
 
   useEffect(() => {
     showHideConnectionPopup(popupPaymentLoadingRef, openedPaying);
@@ -551,9 +319,7 @@ const Home: NextPage = () => {
                   : "border-[#858585] text-[#858585] cursor-none"
               }  font-bold text-[16px] `}
             >
-              {(walletSelect as any).name === "Phantom"
-                ? "Xem Thêm Trên Solana Scan"
-                : "Xem Thêm Trên Etherum Scan"}
+              Xem Thêm Trên Bsc Scan
             </a>
             <button
               onClick={() => setOpenedPayingPopup(false)}
@@ -608,18 +374,12 @@ const Home: NextPage = () => {
             </div>
           </div>
           <div className="absolute w-[95%] left-[8px] bottom-[8px] ">
-            {(walletSelect as any).name === "Phantom" ? (
-              <WalletMultiButton />
-            ) : (
-              <button
-                onClick={() =>
-                  onHandleConnectWallet((walletSelect as any).options)
-                }
-                className={style["button-connect-wallet"]}
-              >
-                Select Wallet
-              </button>
-            )}
+            <button
+              onClick={() => onHandleConnectWallet()}
+              className={style["button-connect-wallet"]}
+            >
+              Select Wallet
+            </button>
           </div>
         </div>
       </div>
@@ -638,7 +398,7 @@ const Home: NextPage = () => {
             reset();
           }}
         />
-        <img onClick={() => onHandleLogout()} src="/menu.png" />
+        <img onClick={() => {}} src="/menu.png" />
       </header>
       <main className="p-[16px]">
         <section
@@ -656,21 +416,14 @@ const Home: NextPage = () => {
             </span>
           </h1>
           <QRCode value={dataQRCode} title={selectVoucher} level={"H"} />
+
           <a
+            onClick={() => reset()}
             href={ethercanLink}
             target="_blank"
             className={style["button-buy-success"]}
           >
-            {(walletSelect as any).name === "Phantom"
-              ? "Xem Thêm Trên Solana Scan"
-              : "Xem Thêm Trên Etherum Scan"}
-          </a>
-          <a
-            href={ethercanLink}
-            target="_blank"
-            className={style["button-buy-success"]}
-          >
-            Sử dụng voucher trên App Shopdi
+            Back
           </a>
         </section>
         <section className={`${isPaid ? "hidden" : ""}`}>
@@ -686,7 +439,7 @@ const Home: NextPage = () => {
                 const number = Number(e.target.value || 0);
                 if (isNaN(number)) return;
                 setValueVoucher(number);
-                setUsdc(convertVNDToUSDC(number));
+                setUsdc(convertVNDToSHOD(number));
 
                 const voucher = vouchers.find(
                   (voucher) => voucher.price === number
@@ -712,7 +465,7 @@ const Home: NextPage = () => {
 
                 setValueVoucher(number);
                 setDisplayInput(numberWithCommas(number));
-                setUsdc(convertVNDToUSDC(number));
+                setUsdc(convertVNDToSHOD(number));
 
                 const voucher = vouchers.find(
                   (voucher) => voucher.price === number
@@ -754,7 +507,7 @@ const Home: NextPage = () => {
             ></input>
 
             <div className={style["title-price"]}>Payment Wallet</div>
-            <h1 className={style["token-id"]}>{usdc} USDC</h1>
+            <h1 className={style["token-id"]}>{usdc} SHOD</h1>
             <span className={style["title-you"]}>
               <input
                 checked={agree}
@@ -768,37 +521,12 @@ const Home: NextPage = () => {
             <button
               disabled={agree ? false : true}
               onClick={() => {
-                const wallselector = walletSelect as any;
-                if (wallselector.name === "Phantom") {
-                  onHandleBuyingSolana();
-                } else {
-                  onHandleBuying();
-                }
+                onHandleBuying();
               }}
               className={style["button-buy"]}
             >
               Buy
             </button>
-            {/* <span className={style["buyer-name-val"]}>
-              Enter your token USDC exchange:
-            </span>
-            <input
-              className={style["buyer-input"]}
-              type="text"
-              placeholder="0"
-              onChange={(e) => {
-                setMintValue(e.target.value);
-              }}
-              value={mintValue}
-            ></input>
-            <button
-              onClick={() => {
-                onHandleMintValue();
-              }}
-              className={style["button-buy"]}
-            >
-              Exchange Token
-            </button> */}
           </section>
         </section>
       </main>
@@ -838,10 +566,6 @@ const Home: NextPage = () => {
           <img src="/LinkedIn.png" />
           <img src="/ytb.png" />
         </div>
-
-        <h5 className="text-[#F4F6F8] font-normal text-[14px] mt-[28px]">
-          Download the app on your phone
-        </h5>
 
         <div className="flex flex-row gap-[6px] mt-[8px] pb-[16px]">
           <img src="/app.png" />
