@@ -4,7 +4,6 @@ import QRCode from "react-qr-code";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import axios from "axios";
-import moment from "moment";
 import style from "./home.module.css";
 import Web3 from "web3";
 import {
@@ -65,8 +64,12 @@ const vouchersData = [
   },
 ];
 
-const serverURL: any = process.env.NEXT_URL_SERVER || "https://nodejs-voucher.herokuapp.com";
-const socketURL: any = process.env.NEXT_URL_SOCKET || "https://nodejs-voucher.herokuapp.com";
+const serverURL: any =
+  process.env.URL_SERVER || "https://nodejs-voucher.herokuapp.com";
+const socketURL: any =
+  process.env.URL_SERVER || "https://nodejs-voucher.herokuapp.com";
+
+console.log(process.env.URL_SERVER);
 
 const Home: NextPage = () => {
   const [vouchers, setVouchers] = useState(vouchersData);
@@ -121,6 +124,7 @@ const Home: NextPage = () => {
         .then((accounts: any) => {
           const [account] = accounts;
           setCurrentAccount(account);
+          setOpened(false);
         })
         .catch((err: any) => console.error(err));
     }
@@ -173,6 +177,15 @@ const Home: NextPage = () => {
   };
 
   const buyToken = async () => {
+    if (!email) {
+      alert("Please input your email");
+      return;
+    }
+
+    if (!usdc) {
+      alert("Please input your value voucher");
+      return;
+    }
     setOpenedPayingPopup(true);
     setPaying(true);
 
