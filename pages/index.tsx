@@ -13,6 +13,7 @@ import {
   contractAddressToken,
 } from "../constants/const";
 import socketIOClient from "socket.io-client";
+import { useGoogleReCaptcha } from "react-google-recaptcha-v3";
 
 function numberWithCommas(x: any) {
   return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
@@ -97,6 +98,8 @@ const Home: NextPage = () => {
 
   const [contractToken, setContractToken] = useState(null);
 
+  const { executeRecaptcha } = useGoogleReCaptcha();
+
   const reset = () => {
     setSelectVoucher("");
     setValueVoucher(0);
@@ -134,9 +137,7 @@ const Home: NextPage = () => {
     const socket = socketIOClient(socketURL);
 
     socket.on("payment-success", (data) => {
-      console.log("client running socket", data);
       const { user } = data;
-      console.log(user, currentAccount, user === currentAccount);
       if (user === currentAccount) {
         console.log("already paid");
         setPaying(false);
@@ -149,6 +150,14 @@ const Home: NextPage = () => {
       socket.disconnect();
     };
   }, [currentAccount]);
+
+  async function verifyCaptcha() {
+    const getToken = executeRecaptcha as any;
+    const captcha = await getToken("signup");
+
+    const { data } = await axios.post(`${serverURL}/captcha`, { captcha });
+    return data;
+  }
 
   useEffect(() => {
     (async () => {
@@ -186,6 +195,14 @@ const Home: NextPage = () => {
       alert("Please input your value voucher");
       return;
     }
+
+    const { success: isVerify, message } = await verifyCaptcha();
+    
+    if (!isVerify) {
+      alert(message);
+      return;
+    }
+
     setOpenedPayingPopup(true);
     setPaying(true);
 
