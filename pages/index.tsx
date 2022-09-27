@@ -70,7 +70,7 @@ const serverURL: any =
 const socketURL: any =
   process.env.URL_SERVER || "https://nodejs-voucher.herokuapp.com";
 
-console.log(process.env.URL_SERVER);
+console.log(serverURL, socketURL);
 
 const Home: NextPage = () => {
   const [vouchers, setVouchers] = useState(vouchersData);
@@ -130,6 +130,8 @@ const Home: NextPage = () => {
           setOpened(false);
         })
         .catch((err: any) => console.error(err));
+    } else {
+      alert("Please install metamask.");
     }
   };
 
@@ -162,6 +164,11 @@ const Home: NextPage = () => {
   useEffect(() => {
     (async () => {
       const { ethereum } = window as any;
+
+      if (!ethereum) {
+        alert("Please install metamask");
+        return;
+      }
 
       const web3: any = new Web3(ethereum);
       const contract: any = new web3.eth.Contract(shopdiAbi, contractAddress);
@@ -197,7 +204,7 @@ const Home: NextPage = () => {
     }
 
     const { success: isVerify, message } = await verifyCaptcha();
-    
+
     if (!isVerify) {
       alert(message);
       return;
@@ -239,6 +246,12 @@ const Home: NextPage = () => {
 
   useEffect(() => {
     const { ethereum } = window as any;
+
+    if (!ethereum) {
+      alert("Please install metamask.");
+      return;
+    }
+
     ethereum.on("accountsChanged", function (accounts: any) {
       const [account] = accounts;
       setCurrentAccount(account);
